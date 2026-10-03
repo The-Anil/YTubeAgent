@@ -27,6 +27,25 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CHANNELS_FILE = os.path.join(ROOT, "channels.txt")
 STATE_FILE = os.path.join(ROOT, "state", "processed.json")
 CACHE_FILE = os.path.join(ROOT, "state", "channels_cache.json")
+ENV_FILE = os.path.join(ROOT, ".env")
+
+
+def load_dotenv(path: str = ENV_FILE) -> None:
+    """Load KEY=VALUE lines from a local .env (if present) into os.environ.
+
+    Zero-dependency; existing environment variables win. Used for local runs;
+    GitHub Actions injects the same vars from repo secrets instead.
+    """
+    if not os.path.exists(path):
+        return
+    with open(path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            key, value = key.strip(), value.strip().strip('"').strip("'")
+            os.environ.setdefault(key, value)
 
 WINDOW_HOURS = 24
 PRUNE_DAYS = 30
@@ -109,6 +128,7 @@ def run(
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+    load_dotenv()
     count = run()
     logging.getLogger("ytubeagent").info("done; %d videos summarized", count)
 
