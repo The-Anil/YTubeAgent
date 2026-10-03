@@ -1,0 +1,4 @@
+feedparser
+youtube-transcript-api
+yt-dlp
+requests
