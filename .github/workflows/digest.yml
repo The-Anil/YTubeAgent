@@ -2,6 +2,11 @@ name: YouTube Daily Digest
 
 on:
   workflow_dispatch:  # allow manual runs from the Actions tab
+    inputs:
+      window_hours:
+        description: "Lookback window in hours (use a large value like 720 to test on older videos)"
+        required: false
+        default: "24"
   schedule:
     # 09:30 UTC == 15:00 IST (3 PM). GitHub cron can be delayed under load.
     - cron: "30 9 * * *"
@@ -29,6 +34,7 @@ jobs:
 
       - name: Run digest
         env:
+          WINDOW_HOURS: ${{ github.event.inputs.window_hours }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           OPENROUTER_MODEL: ${{ vars.OPENROUTER_MODEL }}
           DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}

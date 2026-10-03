@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from src import main as main_mod
 from src.feed import Video
@@ -86,3 +86,27 @@ def test_no_videos_no_post(tmp_path, monkeypatch):
     count = main_mod.run(state_file=state_file, now=NOW)
     assert count == 0
     assert "body" not in posted
+
+
+def test_window_hours_env_override(monkeypatch):
+    monkeypatch.setenv("WINDOW_HOURS", "720")
+    assert main_mod._window_hours() == 720
+    monkeypatch.setenv("WINDOW_HOURS", "")
+    assert main_mod._window_hours() == main_mod.WINDOW_HOURS
+    monkeypatch.setenv("WINDOW_HOURS", "garbage")
+    assert main_mod._window_hours() == main_mod.WINDOW_HOURS
+
+
+def test_window_passed_to_since(tmp_path, monkeypatch):
+    """A wide window includes an older video that 24h would exclude."""
+    state_file = str(tmp_path / "processed.json")
+    captured = {}
+    _wire(monkeypatch, [])
+
+    def fake_fetch(cid, since, seen_ids=None, **k):
+        captured["since"] = since
+        return []
+    monkeypatch.setattr(main_mod.feed_mod, "fetch_recent", fake_fetch)
+
+    main_mod.run(state_file=state_file, now=NOW, window_hours=720)
+    assert captured["since"] == NOW - timedelta(hours=720)

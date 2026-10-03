@@ -109,16 +109,27 @@ def notify_config_from_env() -> notify_mod.NotifyConfig:
     )
 
 
+def _window_hours() -> int:
+    """Lookback window; overridable via WINDOW_HOURS env for manual test runs."""
+    raw = os.environ.get("WINDOW_HOURS", "").strip()
+    try:
+        return int(raw) if raw else WINDOW_HOURS
+    except ValueError:
+        return WINDOW_HOURS
+
+
 def run(
     channels_file: str = CHANNELS_FILE,
     state_file: str = STATE_FILE,
     cache_file: str = CACHE_FILE,
     now: Optional[datetime] = None,
     config: Optional[notify_mod.NotifyConfig] = None,
+    window_hours: Optional[int] = None,
 ) -> int:
     """Run one digest cycle. Returns the number of videos summarized."""
     now = now or datetime.now(timezone.utc)
-    since = now - timedelta(hours=WINDOW_HOURS)
+    window = window_hours if window_hours is not None else _window_hours()
+    since = now - timedelta(hours=window)
     config = config if config is not None else notify_config_from_env()
 
     state = State.load(state_file)
@@ -135,7 +146,7 @@ def run(
         if not posted:
             print(body)  # nothing configured -> emit for manual copy
     else:
-        log.info("no new videos in the last %dh", WINDOW_HOURS)
+        log.info("no new videos in the last %dh", window)
 
     state.prune(PRUNE_DAYS, now=now)
     state.save(state_file)
