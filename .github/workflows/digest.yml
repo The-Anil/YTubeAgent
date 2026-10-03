@@ -1,10 +1,10 @@
 name: YouTube Daily Digest
 
 on:
+  workflow_dispatch:  # allow manual runs from the Actions tab
   schedule:
     # 09:30 UTC == 15:00 IST (3 PM). GitHub cron can be delayed under load.
     - cron: "30 9 * * *"
-  workflow_dispatch: {}  # allow manual runs from the Actions tab
 
 permissions:
   contents: write  # needed to commit the updated state file
