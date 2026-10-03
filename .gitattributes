@@ -1,0 +1,9 @@
+# Normalize line endings. Shell/YAML run on Linux runners — must be LF or bash
+# chokes on \r. Python kept LF too for consistency.
+* text=auto eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.py text eol=lf
+*.sh text eol=lf
+*.md text eol=lf
+*.txt text eol=lf
