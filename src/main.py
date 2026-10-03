@@ -19,7 +19,7 @@ from src import notify as notify_mod
 from src import shorts as shorts_mod
 from src import summarize as summarize_mod
 from src import transcript as transcript_mod
-from src.digest import DigestItem, build_digest
+from src.digest import DigestItem, build_digest, build_discord_embeds, digest_header
 from src.state import State
 
 log = logging.getLogger("ytubeagent")
@@ -141,7 +141,9 @@ def run(
 
     if items:
         body = build_digest(items, day=now.date())
-        posted = notify_mod.notify(body, config)
+        embeds = build_discord_embeds(items)
+        header = digest_header(items, day=now.date())
+        posted = notify_mod.notify(body, config, discord_embeds=embeds, discord_content=header)
         log.info("posted digest with %d videos to: %s", len(items), posted or "nowhere")
         if not posted:
             print(body)  # nothing configured -> emit for manual copy

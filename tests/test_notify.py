@@ -101,3 +101,31 @@ def test_notify_long_text_sends_multiple_discord_calls():
     long_text = "\n".join("l" * 100 for _ in range(60))  # ~6000 chars > 2000
     notify(long_text, cfg)
     assert len(responses.calls) >= 3
+
+
+@responses.activate
+def test_notify_discord_embeds_with_header():
+    responses.add(responses.POST, DISCORD_API.format(channel_id=CHAN), status=200)
+    responses.add(responses.POST, SLACK_API, json={"ok": True}, status=200)
+    embeds = [{"title": "V1", "color": 123}, {"title": "V2", "color": 456}]
+    cfg = NotifyConfig(discord_bot_token="t", discord_channel_id=CHAN,
+                       slack_bot_token="s", slack_channel_id="C1")
+    posted = notify("plain text for slack", cfg,
+                    discord_embeds=embeds, discord_content="HEADER")
+    assert posted == ["discord", "slack"]
+    disc = json.loads(responses.calls[0].request.body)
+    assert disc["embeds"] == embeds
+    assert disc["content"] == "HEADER"  # header rides on first message
+    slack = json.loads(responses.calls[1].request.body)
+    assert slack["text"] == "plain text for slack"  # slack ignores embeds
+
+
+@responses.activate
+def test_notify_discord_embeds_batched_by_ten():
+    responses.add(responses.POST, DISCORD_API.format(channel_id=CHAN), status=200)
+    embeds = [{"title": f"V{i}", "color": i} for i in range(23)]
+    cfg = NotifyConfig(discord_bot_token="t", discord_channel_id=CHAN)
+    notify("", cfg, discord_embeds=embeds, discord_content="H")
+    assert len(responses.calls) == 3  # 10 + 10 + 3
+    batches = [json.loads(c.request.body)["embeds"] for c in responses.calls]
+    assert [len(b) for b in batches] == [10, 10, 3]

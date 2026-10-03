@@ -25,7 +25,7 @@ from src import notify as notify_mod
 from src import shorts as shorts_mod
 from src import summarize as summarize_mod
 from src import transcript as transcript_mod
-from src.digest import DigestItem, build_digest
+from src.digest import DigestItem, build_digest, build_discord_embeds, digest_header
 from src.main import CACHE_FILE, CHANNELS_FILE, load_dotenv
 
 log = logging.getLogger("e2e")
@@ -86,7 +86,9 @@ def main():
                  bool(config.discord_bot_token and config.discord_channel_id),
                  bool(config.slack_bot_token and config.slack_channel_id))
         return
-    posted = notify_mod.notify(body, config)
+    embeds = build_discord_embeds(items)
+    header = digest_header(items, day=datetime.now(timezone.utc).date())
+    posted = notify_mod.notify(body, config, discord_embeds=embeds, discord_content=header)
     log.info("posted to: %s", posted or "nowhere")
 
 

@@ -22,6 +22,7 @@ log = logging.getLogger("ytubeagent.notify")
 
 DISCORD_LIMIT = 2000
 SLACK_LIMIT = 3500
+DISCORD_MAX_EMBEDS = 10  # Discord caps embeds at 10 per message
 
 DISCORD_API = "https://discord.com/api/v10/channels/{channel_id}/messages"
 SLACK_API = "https://slack.com/api/chat.postMessage"
@@ -52,10 +53,30 @@ def chunk_text(text: str, limit: int) -> List[str]:
 
 
 # ---- low-level posters ----------------------------------------------------
-def post_discord_webhook(url, text, session=None):
-    post = (session or requests).post
-    for chunk in chunk_text(text, DISCORD_LIMIT):
-        post(url, json={"content": chunk}, timeout=30).raise_for_status()
+def _embed_batches(embeds):
+    for i in range(0, len(embeds), DISCORD_MAX_EMBEDS):
+        yield embeds[i:i + DISCORD_MAX_EMBEDS]
+
+
+def _post_discord(post, url, headers, text=None, embeds=None):
+    """Post to a Discord endpoint: embed-cards if given, else text chunks.
+
+    When embeds are present the optional ``text`` rides along as the content of
+    the first message (used for the digest header line).
+    """
+    if embeds:
+        for i, batch in enumerate(_embed_batches(embeds)):
+            payload = {"embeds": batch}
+            if i == 0 and text:
+                payload["content"] = text[:DISCORD_LIMIT]
+            post(url, json=payload, headers=headers, timeout=30).raise_for_status()
+    else:
+        for chunk in chunk_text(text or "", DISCORD_LIMIT):
+            post(url, json={"content": chunk}, headers=headers, timeout=30).raise_for_status()
+
+
+def post_discord_webhook(url, text=None, embeds=None, session=None):
+    _post_discord((session or requests).post, url, None, text=text, embeds=embeds)
 
 
 def post_slack_webhook(url, text, session=None):
@@ -64,12 +85,10 @@ def post_slack_webhook(url, text, session=None):
         post(url, json={"text": chunk}, timeout=30).raise_for_status()
 
 
-def post_discord_bot(token, channel_id, text, session=None):
-    post = (session or requests).post
+def post_discord_bot(token, channel_id, text=None, embeds=None, session=None):
     headers = {"Authorization": f"Bot {token}", "Content-Type": "application/json"}
     url = DISCORD_API.format(channel_id=channel_id)
-    for chunk in chunk_text(text, DISCORD_LIMIT):
-        post(url, json={"content": chunk}, headers=headers, timeout=30).raise_for_status()
+    _post_discord((session or requests).post, url, headers, text=text, embeds=embeds)
 
 
 def post_slack_bot(token, channel_id, text, session=None):
@@ -95,8 +114,18 @@ class NotifyConfig:
     slack_webhook: str = ""
 
 
-def notify(text: str, config: NotifyConfig, session: Optional[requests.Session] = None) -> List[str]:
+def notify(
+    text: str,
+    config: NotifyConfig,
+    session: Optional[requests.Session] = None,
+    discord_embeds: Optional[List[dict]] = None,
+    discord_content: Optional[str] = None,
+) -> List[str]:
     """Post the digest via whatever is configured. Returns platforms posted to.
+
+    Discord uses ``discord_embeds`` (colored cards) when provided, with
+    ``discord_content`` as the header line; otherwise it falls back to ``text``.
+    Slack always uses ``text``.
 
     Per platform, a bot token + channel id takes precedence over a webhook URL.
     Each platform is attempted independently: a failure on one is logged and
@@ -104,7 +133,7 @@ def notify(text: str, config: NotifyConfig, session: Optional[requests.Session] 
     when both fail (returns ``[]``).
     """
     posted: List[str] = []
-    if not text:
+    if not text and not discord_embeds:
         return posted
 
     def _try(platform: str, fn) -> None:
@@ -114,11 +143,15 @@ def notify(text: str, config: NotifyConfig, session: Optional[requests.Session] 
         except Exception as e:  # noqa: BLE001 - never let a webhook abort the run
             log.warning("posting to %s failed: %s", platform, e)
 
+    d_text = discord_content if discord_embeds else text
+
     if config.discord_bot_token and config.discord_channel_id:
         _try("discord", lambda: post_discord_bot(
-            config.discord_bot_token, config.discord_channel_id, text, session))
+            config.discord_bot_token, config.discord_channel_id,
+            text=d_text, embeds=discord_embeds, session=session))
     elif config.discord_webhook:
-        _try("discord", lambda: post_discord_webhook(config.discord_webhook, text, session))
+        _try("discord", lambda: post_discord_webhook(
+            config.discord_webhook, text=d_text, embeds=discord_embeds, session=session))
 
     if config.slack_bot_token and config.slack_channel_id:
         _try("slack", lambda: post_slack_bot(
