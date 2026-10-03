@@ -1,0 +1,117 @@
+"""Orchestrate the daily YouTube digest pipeline.
+
+Steps: load state -> resolve channels -> fetch last-24h unseen videos per
+channel -> drop Shorts -> fetch transcript -> summarize -> group + format ->
+post to Discord/Slack -> persist processed IDs. Per-video failures are logged
+and skipped so one bad video never aborts the whole digest.
+"""
+from __future__ import annotations
+
+import logging
+import os
+from datetime import datetime, timedelta, timezone
+from typing import List, Optional
+
+from src import channels as channels_mod
+from src import feed as feed_mod
+from src import notify as notify_mod
+from src import shorts as shorts_mod
+from src import summarize as summarize_mod
+from src import transcript as transcript_mod
+from src.digest import DigestItem, build_digest
+from src.state import State
+
+log = logging.getLogger("ytubeagent")
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+CHANNELS_FILE = os.path.join(ROOT, "channels.txt")
+STATE_FILE = os.path.join(ROOT, "state", "processed.json")
+CACHE_FILE = os.path.join(ROOT, "state", "channels_cache.json")
+
+WINDOW_HOURS = 24
+PRUNE_DAYS = 30
+
+
+def collect_items(
+    channel_map: dict,
+    since: datetime,
+    state: State,
+) -> List[DigestItem]:
+    """Build digest items for all new, non-Short videos across channels."""
+    items: List[DigestItem] = []
+    for entry, channel_id in channel_map.items():
+        try:
+            videos = feed_mod.fetch_recent(channel_id, since=since, seen_ids=state.ids)
+        except Exception as e:  # noqa: BLE001 - never let one channel abort the run
+            log.warning("feed fetch failed for %s (%s): %s", entry, channel_id, e)
+            continue
+
+        for v in videos:
+            try:
+                if shorts_mod.is_short(v.video_id):
+                    log.info("skip short: %s %s", v.video_id, v.title)
+                    state.add(v.video_id, when=v.published)  # mark so we don't recheck
+                    continue
+                text = transcript_mod.fetch_transcript(v.video_id)
+                summary = summarize_mod.summarize(
+                    v.title, text or (v.description or v.title)
+                )
+                if not text:
+                    summary = f"{summary}\n_(no transcript — summarized from title/description)_"
+                items.append(
+                    DigestItem(
+                        channel_title=v.channel_title or entry,
+                        title=v.title,
+                        url=v.url,
+                        summary=summary,
+                    )
+                )
+                state.add(v.video_id, when=v.published)
+            except Exception as e:  # noqa: BLE001
+                log.warning("failed processing %s (%s): %s", v.video_id, v.title, e)
+    return items
+
+
+def run(
+    channels_file: str = CHANNELS_FILE,
+    state_file: str = STATE_FILE,
+    cache_file: str = CACHE_FILE,
+    now: Optional[datetime] = None,
+    discord_url: Optional[str] = None,
+    slack_url: Optional[str] = None,
+) -> int:
+    """Run one digest cycle. Returns the number of videos summarized."""
+    now = now or datetime.now(timezone.utc)
+    since = now - timedelta(hours=WINDOW_HOURS)
+    discord_url = discord_url if discord_url is not None else os.environ.get("DISCORD_WEBHOOK_URL", "")
+    slack_url = slack_url if slack_url is not None else os.environ.get("SLACK_WEBHOOK_URL", "")
+
+    state = State.load(state_file)
+    channel_map = channels_mod.resolve_channels(channels_file, cache_path=cache_file)
+    if not channel_map:
+        log.warning("no channels resolved from %s", channels_file)
+
+    items = collect_items(channel_map, since=since, state=state)
+
+    if items:
+        body = build_digest(items, day=now.date())
+        posted = notify_mod.notify(body, discord_url=discord_url, slack_url=slack_url)
+        log.info("posted digest with %d videos to: %s", len(items), posted or "nowhere")
+        if not posted:
+            print(body)  # no webhooks configured -> emit for manual copy
+    else:
+        log.info("no new videos in the last %dh", WINDOW_HOURS)
+
+    state.prune(PRUNE_DAYS, now=now)
+    state.save(state_file)
+    return len(items)
+
+
+def main() -> None:
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+    count = run()
+    logging.getLogger("ytubeagent").info("done; %d videos summarized", count)
+
+
+if __name__ == "__main__":
+    main()
