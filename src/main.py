@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import os
+import sys
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
@@ -91,19 +92,34 @@ def collect_items(
     return items
 
 
+def _env(name: str) -> str:
+    """Read an env var, treating unfilled ``REPLACE_`` placeholders as empty."""
+    value = os.environ.get(name, "").strip()
+    return "" if "REPLACE_" in value else value
+
+
+def notify_config_from_env() -> notify_mod.NotifyConfig:
+    return notify_mod.NotifyConfig(
+        discord_bot_token=_env("DISCORD_BOT_TOKEN"),
+        discord_channel_id=_env("DISCORD_CHANNEL_ID"),
+        slack_bot_token=_env("SLACK_BOT_TOKEN"),
+        slack_channel_id=_env("SLACK_CHANNEL_ID"),
+        discord_webhook=_env("DISCORD_WEBHOOK_URL"),
+        slack_webhook=_env("SLACK_WEBHOOK_URL"),
+    )
+
+
 def run(
     channels_file: str = CHANNELS_FILE,
     state_file: str = STATE_FILE,
     cache_file: str = CACHE_FILE,
     now: Optional[datetime] = None,
-    discord_url: Optional[str] = None,
-    slack_url: Optional[str] = None,
+    config: Optional[notify_mod.NotifyConfig] = None,
 ) -> int:
     """Run one digest cycle. Returns the number of videos summarized."""
     now = now or datetime.now(timezone.utc)
     since = now - timedelta(hours=WINDOW_HOURS)
-    discord_url = discord_url if discord_url is not None else os.environ.get("DISCORD_WEBHOOK_URL", "")
-    slack_url = slack_url if slack_url is not None else os.environ.get("SLACK_WEBHOOK_URL", "")
+    config = config if config is not None else notify_config_from_env()
 
     state = State.load(state_file)
     channel_map = channels_mod.resolve_channels(channels_file, cache_path=cache_file)
@@ -114,10 +130,10 @@ def run(
 
     if items:
         body = build_digest(items, day=now.date())
-        posted = notify_mod.notify(body, discord_url=discord_url, slack_url=slack_url)
+        posted = notify_mod.notify(body, config)
         log.info("posted digest with %d videos to: %s", len(items), posted or "nowhere")
         if not posted:
-            print(body)  # no webhooks configured -> emit for manual copy
+            print(body)  # nothing configured -> emit for manual copy
     else:
         log.info("no new videos in the last %dh", WINDOW_HOURS)
 
@@ -128,6 +144,10 @@ def run(
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+    try:  # Windows consoles default to cp1252 and choke on emoji in the digest
+        sys.stdout.reconfigure(encoding="utf-8")
+    except (AttributeError, ValueError):
+        pass
     load_dotenv()
     count = run()
     logging.getLogger("ytubeagent").info("done; %d videos summarized", count)

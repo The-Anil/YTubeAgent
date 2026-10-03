@@ -14,7 +14,9 @@ import subprocess
 import tempfile
 from typing import List, Optional
 
-_LANGS = ["en", "en-US", "en-GB"]
+# Preferred languages first; transcripts in any language are accepted as a
+# fallback (channels may post in Hindi, etc.) and summarized as-is.
+_LANGS = ["en", "en-US", "en-GB", "hi", "hi-IN"]
 
 _TS_LINE = re.compile(r"-->")
 _INLINE_TAG = re.compile(r"<[^>]+>")           # <00:00:00.000>, <c>, </c>
@@ -46,15 +48,7 @@ def parse_vtt(content: str) -> str:
     return _collapse(" ".join(lines))
 
 
-def _from_api(video_id: str) -> Optional[str]:
-    try:
-        from youtube_transcript_api import YouTubeTranscriptApi
-    except ImportError:
-        return None
-    try:
-        fetched = YouTubeTranscriptApi().fetch(video_id, languages=_LANGS)
-    except Exception:
-        return None
+def _snippets_text(fetched) -> Optional[str]:
     parts = []
     for snippet in fetched:
         text = getattr(snippet, "text", None)
@@ -64,6 +58,29 @@ def _from_api(video_id: str) -> Optional[str]:
             parts.append(text)
     joined = _collapse(" ".join(parts))
     return joined or None
+
+
+def _from_api(video_id: str) -> Optional[str]:
+    try:
+        from youtube_transcript_api import YouTubeTranscriptApi
+    except ImportError:
+        return None
+    api = YouTubeTranscriptApi()
+    # 1) preferred languages
+    try:
+        return _snippets_text(api.fetch(video_id, languages=_LANGS))
+    except Exception:
+        pass
+    # 2) any available transcript (manual or auto-generated, any language)
+    try:
+        for tr in api.list(video_id):
+            try:
+                return _snippets_text(tr.fetch())
+            except Exception:
+                continue
+    except Exception:
+        return None
+    return None
 
 
 def _from_ytdlp(video_id: str) -> Optional[str]:

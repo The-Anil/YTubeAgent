@@ -43,12 +43,21 @@ UCc6CmEbFkEIHJKzZYCshKEQ
 | Secret | Required | Purpose |
 | --- | --- | --- |
 | `OPENROUTER_API_KEY` | yes | OpenRouter API key for summaries |
-| `DISCORD_WEBHOOK_URL` | optional | Discord channel incoming webhook |
-| `SLACK_WEBHOOK_URL` | optional | Slack incoming webhook |
+| `DISCORD_BOT_TOKEN` + `DISCORD_CHANNEL_ID` | optional | Post via a Discord bot |
+| `SLACK_BOT_TOKEN` + `SLACK_CHANNEL_ID` | optional | Post via a Slack bot (`xoxb-…`, `chat:write`) |
+| `DISCORD_WEBHOOK_URL` | optional | Discord incoming webhook (used only if no bot token) |
+| `SLACK_WEBHOOK_URL` | optional | Slack incoming webhook (used only if no bot token) |
 
-At least one of the two webhook URLs should be set; set both to post to both. An
-optional repository **variable** `OPENROUTER_MODEL` overrides the default model
+Configure at least one platform. **Bot token + channel id takes precedence over
+the webhook** for that platform. Each platform posts independently — if one
+fails (bad token, bot not in channel) it is logged and skipped so the other
+still goes out and the run exits cleanly. An optional repository **variable**
+`OPENROUTER_MODEL` overrides the default model
 (`nvidia/nemotron-3-ultra-550b-a55b:free`).
+
+Discord bot needs **View Channel** + **Send Messages** on the target channel and
+must be invited to the server. Slack bot needs the `chat:write` scope and to be
+invited to the channel (`/invite @yourbot`).
 
 ### 3. Enable Actions
 
@@ -61,13 +70,20 @@ at `30 9 * * *` UTC (= 15:00 IST). You can also trigger it manually from the
 
 ```bash
 python -m pip install -r requirements.txt
-export OPENROUTER_API_KEY=sk-or-...
-export DISCORD_WEBHOOK_URL=...        # optional
-export SLACK_WEBHOOK_URL=...          # optional
+cp .env.example .env     # then fill in your keys/tokens
 python -m src.main
 ```
 
-With no webhook URLs set, the digest is printed to stdout for manual copy.
+`src.main` auto-loads `.env` (gitignored). With no platform configured the
+digest is printed to stdout for manual copy.
+
+To test the full pipeline on a channel's **latest** normal video (ignoring the
+24h window and dedup state):
+
+```bash
+python -m scripts.e2e_test --dry-run   # print only
+python -m scripts.e2e_test             # also post to configured platforms
+```
 
 ## Tests
 

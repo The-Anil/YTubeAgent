@@ -42,15 +42,33 @@ def test_fetch_returns_none_when_both_fail(monkeypatch):
     assert fetch_transcript("v") is None
 
 
-def test_from_api_joins_snippets(monkeypatch):
-    class Snip:
-        def __init__(self, text):
-            self.text = text
+class _Snip:
+    def __init__(self, text):
+        self.text = text
 
+
+def test_from_api_joins_snippets(monkeypatch):
     class FakeApi:
         def fetch(self, video_id, languages=None):
-            return [Snip("part one"), Snip("part two")]
+            return [_Snip("part one"), _Snip("part two")]
 
     import youtube_transcript_api
     monkeypatch.setattr(youtube_transcript_api, "YouTubeTranscriptApi", FakeApi)
     assert transcript._from_api("v") == "part one part two"
+
+
+def test_from_api_falls_back_to_any_available_language(monkeypatch):
+    class FakeTranscript:
+        def fetch(self):
+            return [_Snip("hindi text")]
+
+    class FakeApi:
+        def fetch(self, video_id, languages=None):
+            raise RuntimeError("no preferred lang")
+
+        def list(self, video_id):
+            return [FakeTranscript()]
+
+    import youtube_transcript_api
+    monkeypatch.setattr(youtube_transcript_api, "YouTubeTranscriptApi", FakeApi)
+    assert transcript._from_api("v") == "hindi text"

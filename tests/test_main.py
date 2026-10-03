@@ -37,7 +37,7 @@ def _wire(monkeypatch, videos, shorts=(), fail_ids=()):
                         lambda title, text, **k: f"summary of {title}")
     posted = {}
     monkeypatch.setattr(main_mod.notify_mod, "notify",
-                        lambda body, discord_url=None, slack_url=None, **k:
+                        lambda body, config, **k:
                         posted.update(body=body) or ["discord"])
     return posted
 
@@ -46,8 +46,7 @@ def test_end_to_end_happy_path(tmp_path, monkeypatch):
     state_file = str(tmp_path / "processed.json")
     posted = _wire(monkeypatch, [_video("v1", "Vid One"), _video("v2", "Vid Two")])
 
-    count = main_mod.run(state_file=state_file, now=NOW,
-                         discord_url="http://d", slack_url="")
+    count = main_mod.run(state_file=state_file, now=NOW)
     assert count == 2
     assert "Vid One" in posted["body"] and "Vid Two" in posted["body"]
 
@@ -55,8 +54,7 @@ def test_end_to_end_happy_path(tmp_path, monkeypatch):
     st = State.load(state_file)
     assert st.contains("v1") and st.contains("v2")
     posted2 = _wire(monkeypatch, [_video("v1", "Vid One"), _video("v2", "Vid Two")])
-    count2 = main_mod.run(state_file=state_file, now=NOW,
-                          discord_url="http://d", slack_url="")
+    count2 = main_mod.run(state_file=state_file, now=NOW)
     assert count2 == 0
     assert "body" not in posted2
 
@@ -65,8 +63,7 @@ def test_short_is_skipped_but_marked(tmp_path, monkeypatch):
     state_file = str(tmp_path / "processed.json")
     _wire(monkeypatch, [_video("normal", "Normal"), _video("short1", "Short")],
           shorts={"short1"})
-    count = main_mod.run(state_file=state_file, now=NOW,
-                         discord_url="http://d", slack_url="")
+    count = main_mod.run(state_file=state_file, now=NOW)
     assert count == 1
     st = State.load(state_file)
     assert st.contains("short1")  # marked so it isn't rechecked
@@ -76,8 +73,7 @@ def test_one_bad_video_does_not_abort(tmp_path, monkeypatch):
     state_file = str(tmp_path / "processed.json")
     _wire(monkeypatch, [_video("good", "Good"), _video("bad", "Bad")],
           fail_ids={"bad"})
-    count = main_mod.run(state_file=state_file, now=NOW,
-                         discord_url="http://d", slack_url="")
+    count = main_mod.run(state_file=state_file, now=NOW)
     assert count == 1
     st = State.load(state_file)
     assert st.contains("good")
@@ -87,7 +83,6 @@ def test_one_bad_video_does_not_abort(tmp_path, monkeypatch):
 def test_no_videos_no_post(tmp_path, monkeypatch):
     state_file = str(tmp_path / "processed.json")
     posted = _wire(monkeypatch, [])
-    count = main_mod.run(state_file=state_file, now=NOW,
-                         discord_url="http://d", slack_url="")
+    count = main_mod.run(state_file=state_file, now=NOW)
     assert count == 0
     assert "body" not in posted
