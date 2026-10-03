@@ -1,9 +1,9 @@
 # YouTube channels to track — one per line.
 # Any of these forms works:
-#   @handle                         e.g. @mkbhd
+#   @handle                         e.g. @torahulj
 #   https://www.youtube.com/@handle
 #   https://www.youtube.com/channel/UCxxxxxxxxxxxxxxxxxxxxxx
 #   UCxxxxxxxxxxxxxxxxxxxxxx         (raw channel id)
 # Lines starting with # and blank lines are ignored.
 
-@mkbhd
+@torahulj

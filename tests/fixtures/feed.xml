@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns:yt="http://www.youtube.com/xml/schemas/2015"
+      xmlns:media="http://search.yahoo.com/mrss/"
+      xmlns="http://www.w3.org/2005/Atom">
+  <yt:channelId>UCxxxxxxxxxxxxxxxxxxxxxx</yt:channelId>
+  <title>Test Channel</title>
+  <entry>
+    <id>yt:video:VID_FRESH</id>
+    <yt:videoId>VID_FRESH</yt:videoId>
+    <yt:channelId>UCxxxxxxxxxxxxxxxxxxxxxx</yt:channelId>
+    <title>Fresh Video</title>
+    <link rel="alternate" href="https://www.youtube.com/watch?v=VID_FRESH"/>
+    <author><name>Test Channel</name></author>
+    <published>2026-01-31T10:00:00+00:00</published>
+    <media:group>
+      <media:description>A fresh description.</media:description>
+    </media:group>
+  </entry>
+  <entry>
+    <id>yt:video:VID_OLD</id>
+    <yt:videoId>VID_OLD</yt:videoId>
+    <yt:channelId>UCxxxxxxxxxxxxxxxxxxxxxx</yt:channelId>
+    <title>Old Video</title>
+    <link rel="alternate" href="https://www.youtube.com/watch?v=VID_OLD"/>
+    <author><name>Test Channel</name></author>
+    <published>2026-01-01T10:00:00+00:00</published>
+  </entry>
+  <entry>
+    <id>yt:video:VID_SEEN</id>
+    <yt:videoId>VID_SEEN</yt:videoId>
+    <yt:channelId>UCxxxxxxxxxxxxxxxxxxxxxx</yt:channelId>
+    <title>Already Processed</title>
+    <link rel="alternate" href="https://www.youtube.com/watch?v=VID_SEEN"/>
+    <author><name>Test Channel</name></author>
+    <published>2026-01-31T09:00:00+00:00</published>
+  </entry>
+</feed>
